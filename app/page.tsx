@@ -199,6 +199,8 @@ function RichTextEditor({ value, onSave }: { value: string; onSave: (value: stri
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState("");
+  const [activeView, setActiveView] = useState<"board" | "summary">("board");
+  const [summaryWeekOffset, setSummaryWeekOffset] = useState(0);
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<Priority | "all">("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -286,6 +288,40 @@ export default function Home() {
     done: tasks.filter((task) => task.status === "done").length,
   };
   const progress = tasks.length ? Math.round((counts.done / tasks.length) * 100) : 0;
+  const weeklySummaries = useMemo(() => {
+    const startOfWeek = (date: Date) => {
+      const next = new Date(date);
+      const day = next.getDay();
+      next.setHours(0, 0, 0, 0);
+      next.setDate(next.getDate() - (day === 0 ? 6 : day - 1));
+      return next;
+    };
+    const today = startOfWeek(new Date());
+    const formatDate = (date: Date) => new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(date);
+    return Array.from({ length: 4 }, (_, index) => {
+      const offset = index - 3;
+      const start = new Date(today);
+      start.setDate(today.getDate() + offset * 7);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      const weekTasks = tasks.filter((task) => task.createdAt >= start.getTime() && task.createdAt <= end.getTime());
+      const weekCounts = {
+        todo: weekTasks.filter((task) => task.status === "todo").length,
+        progress: weekTasks.filter((task) => task.status === "progress").length,
+        done: weekTasks.filter((task) => task.status === "done").length,
+      };
+      return {
+        offset,
+        label: offset === 0 ? "이번 주" : `${formatDate(start)} 주`,
+        range: `${formatDate(start)} ~ ${formatDate(end)}`,
+        tasks: weekTasks,
+        counts: weekCounts,
+        progress: weekTasks.length ? Math.round((weekCounts.done / weekTasks.length) * 100) : 0,
+      };
+    }).reverse();
+  }, [tasks]);
+  const selectedWeek = weeklySummaries.find((week) => week.offset === summaryWeekOffset) ?? weeklySummaries[0];
 
   function createTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -329,6 +365,7 @@ export default function Home() {
     const id = crypto.randomUUID();
     setProjects((current) => [...current, { id, name, tasks: [] }]);
     setActiveProjectId(id);
+    setActiveView("board");
     setSearch("");
     setPriorityFilter("all");
     setNewProjectName("");
@@ -367,8 +404,8 @@ export default function Home() {
             <div><strong>{activeProject?.name ?? "One Step"}</strong><small>개인 업무 프로젝트</small></div>
           </div>
           <nav className="side-nav" aria-label="프로젝트 메뉴">
-            <button><span>⌂</span>요약</button>
-            <button className="active"><span>▦</span>TO-DO</button>
+            <button type="button" className={activeView === "summary" ? "active" : ""} onClick={() => { setActiveView("summary"); setSelectedTaskId(null); }}><span>⌂</span>요약</button>
+            <button type="button" className={activeView === "board" ? "active" : ""} onClick={() => setActiveView("board")}><span>▦</span>TO-DO</button>
           </nav>
           <div className="side-divider" />
           <nav className="side-nav secondary">
@@ -377,8 +414,8 @@ export default function Home() {
           <p className="storage-note"><span /> 이 기기에 자동 저장됨</p>
         </aside>
 
-        <section className="main-content" aria-labelledby="board-title">
-          <div className="breadcrumbs"><span>프로젝트</span><b>/</b><span>{activeProject?.name ?? "One Step"}</span><b>/</b><strong>TO-DO</strong></div>
+        <section className="main-content" aria-labelledby={activeView === "summary" ? "summary-title" : "board-title"}>
+          <div className="breadcrumbs"><span>프로젝트</span><b>/</b><span>{activeProject?.name ?? "One Step"}</span><b>/</b><strong>{activeView === "summary" ? "요약" : "TO-DO"}</strong></div>
           <div className="project-tabs-wrap">
             <div className="project-tabs" role="tablist" aria-label="프로젝트 선택">
               {projects.map((project) => (
@@ -398,6 +435,7 @@ export default function Home() {
               <button className="add-project-tab" type="button" onClick={() => setIsProjectCreateOpen(true)} aria-label="새 프로젝트 추가">＋<span>프로젝트</span></button>
             </div>
           </div>
+          {activeView === "board" ? <>
           <div className="board-heading">
             <div><h1 id="board-title">나의 업무 보드</h1><p>오늘의 업무를 한눈에 확인하고 다음 단계로 이동하세요.</p></div>
             <div className="heading-actions"><button className="secondary-button">공유</button><button className="more-button" aria-label="추가 메뉴">•••</button></div>
@@ -474,6 +512,29 @@ export default function Home() {
               );
             })}
           </div>
+          </> : (
+            <section className="weekly-summary" aria-labelledby="summary-title">
+              <div className="summary-heading">
+                <div><h1 id="summary-title">주간 업무 요약</h1><p>업무가 등록된 주차를 기준으로 현재 진행 상태를 확인하세요.</p></div>
+                <span className="summary-project-name">{activeProject?.name ?? "One Step"}</span>
+              </div>
+              <div className="week-picker" role="tablist" aria-label="주차 선택">
+                {weeklySummaries.map((week) => <button key={week.offset} type="button" role="tab" aria-selected={week.offset === selectedWeek.offset} className={week.offset === selectedWeek.offset ? "active" : ""} onClick={() => setSummaryWeekOffset(week.offset)}><strong>{week.label}</strong><small>{week.range}</small></button>)}
+              </div>
+              <div className="weekly-overview">
+                <section className="weekly-progress-card"><div><span>{selectedWeek.label} 완료율</span><strong>{selectedWeek.progress}%</strong></div><div className="completion-track"><span style={{ width: `${selectedWeek.progress}%` }} /></div><p>등록 업무 {selectedWeek.tasks.length}개 중 완료 {selectedWeek.counts.done}개</p></section>
+                <div className="weekly-stat-grid">
+                  <div className="weekly-stat todo"><span>□</span><div><strong>{selectedWeek.counts.todo}</strong><small>할 일</small></div></div>
+                  <div className="weekly-stat progress"><span>↻</span><div><strong>{selectedWeek.counts.progress}</strong><small>진행 중</small></div></div>
+                  <div className="weekly-stat done"><span>✓</span><div><strong>{selectedWeek.counts.done}</strong><small>완료</small></div></div>
+                </div>
+              </div>
+              <section className="weekly-task-list" aria-labelledby="week-task-heading">
+                <header><div><h2 id="week-task-heading">{selectedWeek.label} 등록 업무</h2><p>{selectedWeek.range}</p></div><span>{selectedWeek.tasks.length}개</span></header>
+                {selectedWeek.tasks.length ? <div className="week-task-items">{selectedWeek.tasks.map((task) => <button type="button" key={task.id} className="week-task-item" onClick={() => { setActiveView("board"); setSelectedTaskId(task.id); }}><span className={`type-icon ${task.status}`}>{task.status === "done" ? "✓" : "□"}</span><div><strong>{task.title}</strong><small>{task.key} · {task.status === "todo" ? "할 일" : task.status === "progress" ? "진행 중" : "완료"}</small></div><span className={`priority ${task.priority}`}>{task.priority === "high" ? "↑" : task.priority === "low" ? "↓" : "＝"}</span></button>)}</div> : <div className="weekly-empty"><span>□</span><p>이 주차에 등록한 업무가 없습니다.</p></div>}
+              </section>
+            </section>
+          )}
         </section>
       </div>
 

@@ -38,29 +38,39 @@ const COLUMNS: { id: Status; label: string; hint: string }[] = [
 ];
 const PRIORITY_LABEL: Record<Priority, string> = { high: "높음", medium: "보통", low: "낮음" };
 
-function RichTextEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function RichTextEditor({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
   const [openMenu, setOpenMenu] = useState<"list" | "emoji" | null>(null);
+  const [isEditing, setIsEditing] = useState(!value.trim());
+  const [draft, setDraft] = useState(value);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [imageError, setImageError] = useState("");
 
   function safeHtml(html: string) {
     const template = document.createElement("template");
-    const looksLikeHtml = /<\/?(div|p|br|ul|ol|li|b|strong|i|em|u|s|a|pre|code|span|font|img)\b/i.test(html);
+    const looksLikeHtml = /<\/?(div|p|br|ul|ol|li|b|strong|i|em|u|s|a|pre|code|span|font|img|figure|figcaption|blockquote)\b/i.test(html);
     template.innerHTML = looksLikeHtml ? html : html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
     template.content.querySelectorAll("script,style,iframe,object,embed").forEach((element) => element.remove());
     template.content.querySelectorAll("*").forEach((element) => {
       [...element.attributes].forEach((attribute) => {
-        if (attribute.name.startsWith("on") || (attribute.name === "href" && attribute.value.trim().toLowerCase().startsWith("javascript:"))) element.removeAttribute(attribute.name);
+        const value = attribute.value.trim().toLowerCase();
+        if (attribute.name.startsWith("on") || ((attribute.name === "href" || attribute.name === "src") && value.startsWith("javascript:"))) element.removeAttribute(attribute.name);
       });
     });
     return template.innerHTML;
   }
 
   useEffect(() => {
-    if (!editorRef.current) return;
-    const nextHtml = safeHtml(value);
+    if (!isEditing || !editorRef.current) return;
+    const nextHtml = safeHtml(draft);
     if (editorRef.current.innerHTML !== nextHtml) editorRef.current.innerHTML = nextHtml;
-  }, [value]);
+  }, [isEditing, draft]);
+
+  useEffect(() => {
+    if (!isEditing) setDraft(value);
+  }, [value, isEditing]);
 
   function saveSelection() {
     const selection = window.getSelection();
@@ -83,8 +93,8 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     selection.addRange(range);
   }
 
-  function emitChange() {
-    if (editorRef.current) onChange(safeHtml(editorRef.current.innerHTML));
+  function emitDraft() {
+    if (editorRef.current) setDraft(safeHtml(editorRef.current.innerHTML));
     saveSelection();
   }
 
@@ -92,7 +102,7 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     editorRef.current?.focus();
     restoreSelection();
     document.execCommand(command, false, commandValue);
-    emitChange();
+    emitDraft();
     setOpenMenu(null);
   }
 
@@ -113,57 +123,143 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     if (url?.trim()) runCommand("createLink", url.trim());
   }
 
-  function insertImage() {
-    const url = window.prompt("이미지 주소를 입력하세요", "https://");
-    if (url?.trim()) runCommand("insertImage", url.trim());
+  function optimizeImage(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      if (!file.type.startsWith("image/")) return reject(new Error("이미지 파일만 등록할 수 있습니다."));
+      if (file.size > 10 * 1024 * 1024) return reject(new Error("이미지는 10MB 이하만 등록할 수 있습니다."));
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("이미지 파일을 읽지 못했습니다."));
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = () => reject(new Error("이미지를 처리하지 못했습니다."));
+        image.onload = () => {
+          const maxSize = 1400;
+          const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(image.width * scale));
+          canvas.height = Math.max(1, Math.round(image.height * scale));
+          const context = canvas.getContext("2d");
+          if (!context) return reject(new Error("이미지를 처리하지 못했습니다."));
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/webp", 0.82));
+        };
+        image.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function insertImageFiles(files: File[]) {
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (!images.length) return;
+    setImageError("");
+    setIsProcessingImage(true);
+    try {
+      for (const file of images) {
+        const dataUrl = await optimizeImage(file);
+        const alt = file.name.replace(/[&<>"']/g, "");
+        runCommand("insertHTML", `<figure class="editor-image"><img src="${dataUrl}" alt="${alt}"><figcaption>${alt}</figcaption></figure><div><br></div>`);
+      }
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "이미지를 등록하지 못했습니다.");
+    } finally {
+      setIsProcessingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  }
+
+  function startEditing() {
+    setDraft(value);
+    setImageError("");
+    setIsEditing(true);
+    savedRangeRef.current = null;
+  }
+
+  function cancelEditing() {
+    setDraft(value);
+    setImageError("");
+    setOpenMenu(null);
+    setIsEditing(false);
+    savedRangeRef.current = null;
+  }
+
+  function saveDescription() {
+    const clean = safeHtml(editorRef.current?.innerHTML ?? draft);
+    const template = document.createElement("template");
+    template.innerHTML = clean;
+    const hasContent = Boolean(template.content.textContent?.trim() || template.content.querySelector("img"));
+    const savedValue = hasContent ? clean : "";
+    onSave(savedValue);
+    setDraft(savedValue);
+    setOpenMenu(null);
+    setIsEditing(false);
+    savedRangeRef.current = null;
+  }
+
+  if (!isEditing) {
+    return (
+      <div className="description-saved">
+        <div className="description-saved-head"><span>{value ? "등록된 설명" : "설명 없음"}</span><button type="button" onClick={startEditing}>{value ? "수정" : "설명 작성"}</button></div>
+        {value ? <div className="rich-editor-content description-rendered" dangerouslySetInnerHTML={{ __html: safeHtml(value) }} /> : <p className="description-empty">등록된 설명이 없습니다. 설명 작성 버튼을 눌러 내용을 추가해보세요.</p>}
+      </div>
+    );
   }
 
   return (
-    <div className="rich-editor">
-      <div className="editor-toolbar" role="toolbar" aria-label="설명 서식 도구">
-        <select aria-label="문단 스타일" defaultValue="p" onChange={(event) => { runCommand("formatBlock", event.target.value); event.currentTarget.value = "p"; }}>
-          <option value="p">본문</option><option value="h2">제목 2</option><option value="h3">제목 3</option><option value="blockquote">인용</option>
-        </select>
-        <button type="button" title="굵게 (Ctrl+B)" aria-label="굵게" onMouseDown={(event) => { event.preventDefault(); runCommand("bold"); }}><b>B</b></button>
-        <button type="button" title="기울임" aria-label="기울임" onMouseDown={(event) => { event.preventDefault(); runCommand("italic"); }}><i>I</i></button>
-        <button type="button" title="밑줄 (Ctrl+U)" aria-label="밑줄" onMouseDown={(event) => { event.preventDefault(); runCommand("underline"); }}><u>U</u></button>
-        <label className="color-tool" title="글자 색상"><span>A</span><input type="color" aria-label="글자 색상" defaultValue="#172b4d" onChange={(event) => runCommand("foreColor", event.target.value)} /></label>
-        <div className="editor-menu-wrap">
-          <button type="button" className={openMenu === "list" ? "active" : ""} title="목록" aria-label="목록 선택" aria-expanded={openMenu === "list"} onMouseDown={(event) => { event.preventDefault(); setOpenMenu(openMenu === "list" ? null : "list"); }}>☷</button>
-          {openMenu === "list" && <div className="editor-popover list-popover"><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("bullet"); }}><span>•</span>글머리 기호 목록<kbd>Ctrl+Shift+8</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("number"); }}><span>1.</span>번호 목록<kbd>Ctrl+Shift+7</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("task"); }}><span>☑</span>작업 목록<kbd>Ctrl+Shift+6</kbd></button></div>}
+    <div className="description-editing">
+      <div className="rich-editor">
+        <div className="editor-toolbar" role="toolbar" aria-label="설명 서식 도구">
+          <select aria-label="문단 스타일" defaultValue="p" onChange={(event) => { runCommand("formatBlock", event.target.value); event.currentTarget.value = "p"; }}>
+            <option value="p">본문</option><option value="h2">제목 2</option><option value="h3">제목 3</option><option value="blockquote">인용</option>
+          </select>
+          <button type="button" title="굵게 (Ctrl+B)" aria-label="굵게" onMouseDown={(event) => { event.preventDefault(); runCommand("bold"); }}><b>B</b></button>
+          <button type="button" title="기울임" aria-label="기울임" onMouseDown={(event) => { event.preventDefault(); runCommand("italic"); }}><i>I</i></button>
+          <button type="button" title="밑줄 (Ctrl+U)" aria-label="밑줄" onMouseDown={(event) => { event.preventDefault(); runCommand("underline"); }}><u>U</u></button>
+          <label className="color-tool" title="글자 색상"><span>A</span><input type="color" aria-label="글자 색상" defaultValue="#172b4d" onChange={(event) => runCommand("foreColor", event.target.value)} /></label>
+          <div className="editor-menu-wrap">
+            <button type="button" className={openMenu === "list" ? "active" : ""} title="목록" aria-label="목록 선택" aria-expanded={openMenu === "list"} onMouseDown={(event) => { event.preventDefault(); setOpenMenu(openMenu === "list" ? null : "list"); }}>☷</button>
+            {openMenu === "list" && <div className="editor-popover list-popover"><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("bullet"); }}><span>•</span>글머리 기호 목록<kbd>Ctrl+Shift+8</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("number"); }}><span>1.</span>번호 목록<kbd>Ctrl+Shift+7</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("task"); }}><span>☑</span>작업 목록<kbd>Ctrl+Shift+6</kbd></button></div>}
+          </div>
+          <span className="toolbar-divider" />
+          <button type="button" title="링크" aria-label="링크 삽입" onMouseDown={(event) => { event.preventDefault(); insertLink(); }}>↗</button>
+          <button type="button" title="이미지 파일 선택" aria-label="이미지 파일 선택" disabled={isProcessingImage} onMouseDown={(event) => { event.preventDefault(); imageInputRef.current?.click(); }}>▧</button>
+          <input ref={imageInputRef} className="sr-only" type="file" accept="image/*" multiple onChange={(event) => { void insertImageFiles(Array.from(event.target.files ?? [])); }} />
+          <button type="button" title="코드 블록" aria-label="코드 블록" onMouseDown={(event) => { event.preventDefault(); runCommand("formatBlock", "pre"); }}>&lt;/&gt;</button>
+          <div className="editor-menu-wrap">
+            <button type="button" className={openMenu === "emoji" ? "active" : ""} title="이모지" aria-label="이모지 선택" aria-expanded={openMenu === "emoji"} onMouseDown={(event) => { event.preventDefault(); setOpenMenu(openMenu === "emoji" ? null : "emoji"); }}>☺</button>
+            {openMenu === "emoji" && <div className="editor-popover emoji-popover">{["🙂", "✅", "🚀", "💡", "🎯", "⚠️"].map((emoji) => <button key={emoji} type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertText", emoji); }}>{emoji}</button>)}</div>}
+          </div>
+          <span className="toolbar-divider" />
+          <button type="button" title="실행 취소 (Ctrl+Z)" aria-label="실행 취소" onMouseDown={(event) => { event.preventDefault(); runCommand("undo"); }}>↶</button>
+          <button type="button" title="다시 실행" aria-label="다시 실행" onMouseDown={(event) => { event.preventDefault(); runCommand("redo"); }}>↷</button>
+          <button type="button" title="서식 지우기" aria-label="서식 지우기" onMouseDown={(event) => { event.preventDefault(); runCommand("removeFormat"); }}>Tx</button>
         </div>
-        <span className="toolbar-divider" />
-        <button type="button" title="링크" aria-label="링크 삽입" onMouseDown={(event) => { event.preventDefault(); insertLink(); }}>↗</button>
-        <button type="button" title="이미지" aria-label="이미지 삽입" onMouseDown={(event) => { event.preventDefault(); insertImage(); }}>▧</button>
-        <button type="button" title="코드 블록" aria-label="코드 블록" onMouseDown={(event) => { event.preventDefault(); runCommand("formatBlock", "pre"); }}>&lt;/&gt;</button>
-        <div className="editor-menu-wrap">
-          <button type="button" className={openMenu === "emoji" ? "active" : ""} title="이모지" aria-label="이모지 선택" aria-expanded={openMenu === "emoji"} onMouseDown={(event) => { event.preventDefault(); setOpenMenu(openMenu === "emoji" ? null : "emoji"); }}>☺</button>
-          {openMenu === "emoji" && <div className="editor-popover emoji-popover">{["🙂", "✅", "🚀", "💡", "🎯", "⚠️"].map((emoji) => <button key={emoji} type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertText", emoji); }}>{emoji}</button>)}</div>}
-        </div>
-        <span className="toolbar-divider" />
-        <button type="button" title="실행 취소 (Ctrl+Z)" aria-label="실행 취소" onMouseDown={(event) => { event.preventDefault(); runCommand("undo"); }}>↶</button>
-        <button type="button" title="다시 실행" aria-label="다시 실행" onMouseDown={(event) => { event.preventDefault(); runCommand("redo"); }}>↷</button>
-        <button type="button" title="서식 지우기" aria-label="서식 지우기" onMouseDown={(event) => { event.preventDefault(); runCommand("removeFormat"); }}>Tx</button>
+        <div
+          ref={editorRef}
+          className="rich-editor-content"
+          contentEditable
+          suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          aria-label="업무 설명"
+          data-placeholder="업무에 필요한 내용, 참고 사항, 완료 기준을 적어보세요."
+          onInput={emitDraft}
+          onMouseUp={saveSelection}
+          onKeyUp={saveSelection}
+          onFocus={saveSelection}
+          onPaste={(event) => {
+            const imageFiles = Array.from(event.clipboardData.items).filter((item) => item.kind === "file" && item.type.startsWith("image/")).map((item) => item.getAsFile()).filter((file): file is File => Boolean(file));
+            event.preventDefault();
+            if (imageFiles.length) void insertImageFiles(imageFiles);
+            else runCommand("insertText", event.clipboardData.getData("text/plain"));
+          }}
+        />
       </div>
-      <div
-        ref={editorRef}
-        className="rich-editor-content"
-        contentEditable
-        suppressContentEditableWarning
-        role="textbox"
-        aria-multiline="true"
-        aria-label="업무 설명"
-        data-placeholder="업무에 필요한 내용, 참고 사항, 완료 기준을 적어보세요."
-        onInput={emitChange}
-        onMouseUp={saveSelection}
-        onKeyUp={saveSelection}
-        onFocus={saveSelection}
-        onPaste={(event) => { event.preventDefault(); runCommand("insertText", event.clipboardData.getData("text/plain")); }}
-      />
+      <div className="description-editor-meta"><span>{isProcessingImage ? "이미지를 최적화하는 중..." : "이미지 파일 선택 또는 복사·붙여넣기 가능 (최대 10MB)"}</span>{imageError && <strong role="alert">{imageError}</strong>}</div>
+      <div className="description-actions"><button type="button" className="description-cancel" onClick={cancelEditing}>취소하기</button><button type="button" className="description-save" onClick={saveDescription} disabled={isProcessingImage}>저장하기</button></div>
     </div>
   );
 }
-
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState("");
@@ -474,7 +570,7 @@ export default function Home() {
 
               <section className="detail-section">
                 <h3>설명</h3>
-                <RichTextEditor key={selectedTask.id} value={selectedTask.description ?? ""} onChange={(description) => updateTask(selectedTask.id, { description })} />
+                <RichTextEditor key={selectedTask.id} value={selectedTask.description ?? ""} onSave={(description) => updateTask(selectedTask.id, { description })} />
               </section>
 
               <section className="detail-section activity-section">

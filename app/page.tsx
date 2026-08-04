@@ -12,8 +12,15 @@ type Task = {
   priority: Priority;
   createdAt: number;
 };
+type Project = {
+  id: string;
+  name: string;
+  tasks: Task[];
+};
 
 const STORAGE_KEY = "one-step-todos";
+const PROJECTS_STORAGE_KEY = "one-step-projects";
+const ACTIVE_PROJECT_KEY = "one-step-active-project";
 const BOARD_INIT_KEY = "one-step-board-initialized";
 const STARTER_TASKS: Task[] = [
   { id: "starter-1", key: "TASK-001", title: "이번 주 업무 우선순위 정리", status: "todo", priority: "high", createdAt: Date.now() },
@@ -31,10 +38,13 @@ const COLUMNS: { id: Status; label: string; hint: string }[] = [
 const PRIORITY_LABEL: Record<Priority, string> = { high: "높음", medium: "보통", low: "낮음" };
 
 export default function Home() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState("");
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<Priority | "all">("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isProjectCreateOpen, setIsProjectCreateOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -44,29 +54,56 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      const parsed = saved ? JSON.parse(saved) : [];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setTasks(parsed.map((item, index) => ({
+      const normalizeTasks = (items: unknown[]): Task[] => items.map((value, index) => {
+        const item = value as Partial<Task> & { completed?: boolean };
+        return {
           id: String(item.id ?? crypto.randomUUID()),
           key: item.key ?? `TASK-${String(index + 1).padStart(3, "0")}`,
           title: String(item.title ?? "제목 없는 업무"),
           status: item.status ?? (item.completed ? "done" : "todo"),
           priority: item.priority ?? "medium",
           createdAt: Number(item.createdAt ?? Date.now()),
-        })));
-      } else if (!window.localStorage.getItem(BOARD_INIT_KEY)) {
-        setTasks(STARTER_TASKS);
-        window.localStorage.setItem(BOARD_INIT_KEY, "true");
+        };
+      });
+      const savedProjects = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
+      const parsedProjects = savedProjects ? JSON.parse(savedProjects) : [];
+      let initialProjects: Project[];
+      if (Array.isArray(parsedProjects) && parsedProjects.length > 0) {
+        initialProjects = parsedProjects.map((value, index) => {
+          const project = value as Partial<Project>;
+          return {
+            id: String(project.id ?? crypto.randomUUID()),
+            name: String(project.name ?? `프로젝트 ${index + 1}`),
+            tasks: Array.isArray(project.tasks) ? normalizeTasks(project.tasks) : [],
+          };
+        });
+      } else {
+        const legacySaved = window.localStorage.getItem(STORAGE_KEY);
+        const legacyParsed = legacySaved ? JSON.parse(legacySaved) : [];
+        const legacyTasks = Array.isArray(legacyParsed) ? normalizeTasks(legacyParsed) : [];
+        const shouldSeed = legacySaved === null && !window.localStorage.getItem(BOARD_INIT_KEY);
+        initialProjects = [{ id: "project-one-step", name: "One Step", tasks: shouldSeed ? STARTER_TASKS : legacyTasks }];
+        if (shouldSeed) window.localStorage.setItem(BOARD_INIT_KEY, "true");
       }
+      const savedActiveId = window.localStorage.getItem(ACTIVE_PROJECT_KEY);
+      setProjects(initialProjects);
+      setActiveProjectId(initialProjects.some((project) => project.id === savedActiveId) ? savedActiveId! : initialProjects[0].id);
     } catch {}
     setIsReady(true);
   }, []);
 
   useEffect(() => {
-    if (isReady) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-  }, [tasks, isReady]);
+    if (!isReady) return;
+    window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+    if (activeProjectId) window.localStorage.setItem(ACTIVE_PROJECT_KEY, activeProjectId);
+  }, [projects, activeProjectId, isReady]);
 
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0];
+  const tasks = activeProject?.tasks ?? [];
+
+  function updateActiveTasks(updater: (tasks: Task[]) => Task[]) {
+    setProjects((current) => current.map((project) => project.id === activeProjectId ? { ...project, tasks: updater(project.tasks) } : project));
+  }
   const visibleTasks = useMemo(() => {
     const term = search.trim().toLowerCase();
     return tasks.filter((task) => {
@@ -91,7 +128,7 @@ export default function Home() {
       const value = Number(task.key.split("-")[1]);
       return Number.isFinite(value) ? Math.max(max, value) : max;
     }, 0);
-    setTasks((current) => [{
+    updateActiveTasks((current) => [{
       id: crypto.randomUUID(),
       key: `TASK-${String(maxNumber + 1).padStart(3, "0")}`,
       title,
@@ -105,18 +142,38 @@ export default function Home() {
   }
 
   function moveTask(id: string, status: Status) {
-    setTasks((current) => current.map((task) => task.id === id ? { ...task, status } : task));
+    updateActiveTasks((current) => current.map((task) => task.id === id ? { ...task, status } : task));
   }
 
   function saveEdit(event: FormEvent<HTMLFormElement>, id: string) {
     event.preventDefault();
     const title = editingTitle.trim();
-    if (title) setTasks((current) => current.map((task) => task.id === id ? { ...task, title } : task));
+    if (title) updateActiveTasks((current) => current.map((task) => task.id === id ? { ...task, title } : task));
     setEditingId(null);
   }
 
   function deleteTask(id: string) {
-    setTasks((current) => current.filter((task) => task.id !== id));
+    updateActiveTasks((current) => current.filter((task) => task.id !== id));
+  }
+
+  function createProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = newProjectName.trim();
+    if (!name) return;
+    const id = crypto.randomUUID();
+    setProjects((current) => [...current, { id, name, tasks: [] }]);
+    setActiveProjectId(id);
+    setSearch("");
+    setPriorityFilter("all");
+    setNewProjectName("");
+    setIsProjectCreateOpen(false);
+  }
+
+  function selectProject(id: string) {
+    setActiveProjectId(id);
+    setSearch("");
+    setPriorityFilter("all");
+    setEditingId(null);
   }
 
   return (
@@ -141,7 +198,7 @@ export default function Home() {
         <aside className="sidebar">
           <div className="project-summary">
             <span className="project-icon">O</span>
-            <div><strong>One Step</strong><small>개인 업무 프로젝트</small></div>
+            <div><strong>{activeProject?.name ?? "One Step"}</strong><small>개인 업무 프로젝트</small></div>
           </div>
           <nav className="side-nav" aria-label="프로젝트 메뉴">
             <button><span>⌂</span>요약</button>
@@ -155,7 +212,26 @@ export default function Home() {
         </aside>
 
         <section className="main-content" aria-labelledby="board-title">
-          <div className="breadcrumbs"><span>프로젝트</span><b>/</b><span>One Step</span><b>/</b><strong>TO-DO</strong></div>
+          <div className="breadcrumbs"><span>프로젝트</span><b>/</b><span>{activeProject?.name ?? "One Step"}</span><b>/</b><strong>TO-DO</strong></div>
+          <div className="project-tabs-wrap">
+            <div className="project-tabs" role="tablist" aria-label="프로젝트 선택">
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={project.id === activeProjectId}
+                  className={project.id === activeProjectId ? "active" : ""}
+                  onClick={() => selectProject(project.id)}
+                >
+                  <span className="project-tab-dot" />
+                  {project.name}
+                  <small>{project.tasks.length}</small>
+                </button>
+              ))}
+              <button className="add-project-tab" type="button" onClick={() => setIsProjectCreateOpen(true)} aria-label="새 프로젝트 추가">＋<span>프로젝트</span></button>
+            </div>
+          </div>
           <div className="board-heading">
             <div><h1 id="board-title">나의 업무 보드</h1><p>오늘의 업무를 한눈에 확인하고 다음 단계로 이동하세요.</p></div>
             <div className="heading-actions"><button className="secondary-button">공유</button><button className="more-button" aria-label="추가 메뉴">•••</button></div>
@@ -236,10 +312,24 @@ export default function Home() {
         </section>
       </div>
 
+      {isProjectCreateOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsProjectCreateOpen(false); }}>
+          <section className="create-modal project-create-modal" role="dialog" aria-modal="true" aria-labelledby="project-create-title">
+            <header><div><span className="modal-type-icon project-modal-icon">＋</span><div><small>NEW PROJECT</small><h2 id="project-create-title">새 프로젝트 만들기</h2></div></div><button aria-label="닫기" onClick={() => setIsProjectCreateOpen(false)}>×</button></header>
+            <form onSubmit={createProject}>
+              <label htmlFor="project-name">프로젝트 이름 <b>*</b></label>
+              <input id="project-name" autoFocus value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="예: 웹사이트 리뉴얼" maxLength={40} />
+              <p className="project-create-help">프로젝트를 만들면 할 일, 진행 중, 완료 영역이 함께 생성됩니다.</p>
+              <div className="modal-actions"><button type="button" onClick={() => setIsProjectCreateOpen(false)}>취소</button><button className="create-submit" disabled={!newProjectName.trim()}>프로젝트 만들기</button></div>
+            </form>
+          </section>
+        </div>
+      )}
+
       {isCreateOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsCreateOpen(false); }}>
           <section className="create-modal" role="dialog" aria-modal="true" aria-labelledby="create-title">
-            <header><div><span className="modal-type-icon">□</span><div><small>ONE STEP</small><h2 id="create-title">새 업무 만들기</h2></div></div><button aria-label="닫기" onClick={() => setIsCreateOpen(false)}>×</button></header>
+            <header><div><span className="modal-type-icon">□</span><div><small>{activeProject?.name ?? "ONE STEP"}</small><h2 id="create-title">새 업무 만들기</h2></div></div><button aria-label="닫기" onClick={() => setIsCreateOpen(false)}>×</button></header>
             <form onSubmit={createTask}>
               <label htmlFor="task-summary">요약 <b>*</b></label>
               <input id="task-summary" autoFocus value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="해야 할 업무를 입력하세요" maxLength={100} />

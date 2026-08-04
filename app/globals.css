@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 :root {
   --blue:#0c66e4; --blue-dark:#0b55bd; --navy:#172b4d; --text:#172b4d;
@@ -59,6 +59,17 @@ button { color:inherit; }
 .breadcrumbs { display:flex; align-items:center; gap:8px; margin-bottom:20px; color:var(--muted); font-size:12px; }
 .breadcrumbs b { color:#a5adba; }
 .breadcrumbs strong { color:#44546f; }
+.project-tabs-wrap { margin:0 0 24px; border-bottom:1px solid var(--line); }
+.project-tabs { display:flex; align-items:flex-end; gap:4px; overflow-x:auto; scrollbar-width:thin; }
+.project-tabs button { display:flex; flex:0 0 auto; align-items:center; gap:7px; height:42px; margin:0; padding:0 14px; border:0; border-bottom:3px solid transparent; color:#626f86; background:transparent; font-size:12px; font-weight:700; cursor:pointer; }
+.project-tabs button:hover { color:#172b4d; background:#f7f8f9; }
+.project-tabs button.active { color:var(--blue); border-bottom-color:var(--blue); background:#f7faff; }
+.project-tab-dot { width:7px; height:7px; border-radius:50%; background:#b7bec8; }
+.project-tabs button.active .project-tab-dot { background:var(--blue); box-shadow:0 0 0 3px #deebff; }
+.project-tabs button small { display:grid; min-width:19px; height:19px; padding:0 5px; place-items:center; border-radius:10px; color:#626f86; background:#ebecf0; font-size:9px; }
+.project-tabs .add-project-tab { margin-left:4px; border:1px dashed #b7bec8; border-bottom:3px solid transparent; border-radius:6px 6px 0 0; color:#44546f; }
+.project-tabs .add-project-tab:hover { border-color:var(--blue); color:var(--blue); background:#e9f2ff; }
+.project-tabs .add-project-tab > span { font-size:11px; }
 .board-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; }
 .overline { margin:0 0 6px!important; color:var(--blue)!important; font-size:10px!important; font-weight:800; letter-spacing:.14em; }
 .board-heading h1 { margin:0; color:var(--navy); font-size:30px; line-height:1.2; letter-spacing:-.035em; }
@@ -148,6 +159,8 @@ button { color:inherit; }
 .create-modal label b { color:#c9372c; }
 .create-modal form>input,.create-modal form>select { height:40px; border:1px solid #b7bec8; border-radius:5px; padding:0 10px; outline:0; font-size:13px; }
 .create-modal form>input:focus,.create-modal form>select:focus { border-color:var(--blue); box-shadow:0 0 0 1px var(--blue); }
+.project-modal-icon { background:linear-gradient(145deg,#6554c0,#0c66e4); }
+.project-create-help { margin:10px 0 0; color:var(--muted); font-size:11px; line-height:1.5; }
 .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:26px; }
 .modal-actions button { height:36px; border:0; border-radius:5px; padding:0 14px; background:#f1f2f4; font-size:12px; font-weight:700; cursor:pointer; }
 .modal-actions .create-submit { color:#fff; background:var(--blue); }
@@ -179,6 +192,10 @@ button { color:inherit; }
   .side-nav { display:flex; width:100%; }
   .side-nav button { min-width:55px; }
   .main-content { padding:20px 14px 34px; }
+  .project-tabs-wrap { margin-right:-14px; margin-left:-14px; padding-left:14px; }
+  .project-tabs { padding-right:14px; }
+  .project-tabs button { height:40px; padding:0 11px; }
+  .project-tabs .add-project-tab > span { display:none; }
   .board-heading h1 { font-size:24px; }
   .board-heading p { max-width:260px; line-height:1.5; }
   .summary-row { grid-template-columns:repeat(3,1fr); gap:7px; }

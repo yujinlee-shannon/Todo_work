@@ -145,7 +145,7 @@ export default function Home() {
           </div>
           <nav className="side-nav" aria-label="프로젝트 메뉴">
             <button><span>⌂</span>요약</button>
-            <button className="active"><span>▦</span>보드</button>
+            <button className="active"><span>▦</span>TO-DO</button>
           </nav>
           <div className="side-divider" />
           <nav className="side-nav secondary">
@@ -155,9 +155,9 @@ export default function Home() {
         </aside>
 
         <section className="main-content" aria-labelledby="board-title">
-          <div className="breadcrumbs"><span>프로젝트</span><b>/</b><span>One Step</span><b>/</b><strong>보드</strong></div>
+          <div className="breadcrumbs"><span>프로젝트</span><b>/</b><span>One Step</span><b>/</b><strong>TO-DO</strong></div>
           <div className="board-heading">
-            <div><p className="overline">ONE STEP BOARD</p><h1 id="board-title">나의 업무 보드</h1><p>오늘의 업무를 한눈에 확인하고 다음 단계로 이동하세요.</p></div>
+            <div><h1 id="board-title">나의 업무 보드</h1><p>오늘의 업무를 한눈에 확인하고 다음 단계로 이동하세요.</p></div>
             <div className="heading-actions"><button className="secondary-button">공유</button><button className="more-button" aria-label="추가 메뉴">•••</button></div>
           </div>
 

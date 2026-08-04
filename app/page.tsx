@@ -146,9 +146,6 @@ export default function Home() {
           <nav className="side-nav" aria-label="프로젝트 메뉴">
             <button><span>⌂</span>요약</button>
             <button className="active"><span>▦</span>보드</button>
-            <button><span>≡</span>백로그</button>
-            <button><span>◷</span>타임라인</button>
-            <button><span>▥</span>목록</button>
           </nav>
           <div className="side-divider" />
           <nav className="side-nav secondary">

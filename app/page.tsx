@@ -40,13 +40,10 @@ const PRIORITY_LABEL: Record<Priority, string> = { high: "높음", medium: "보�
 
 function RichTextEditor({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
-  const [openMenu, setOpenMenu] = useState<"list" | "emoji" | null>(null);
+  const [openMenu, setOpenMenu] = useState<"list" | null>(null);
   const [isEditing, setIsEditing] = useState(!value.trim());
   const [draft, setDraft] = useState(value);
-  const [isProcessingImage, setIsProcessingImage] = useState(false);
-  const [imageError, setImageError] = useState("");
 
   function safeHtml(html: string) {
     const template = document.createElement("template");
@@ -118,66 +115,14 @@ function RichTextEditor({ value, onSave }: { value: string; onSave: (value: stri
     runCommand("insertHTML", `<${tag}${type === "task" ? ' class="task-list"' : ""}>${items}</${tag}><div><br></div>`);
   }
 
-  function insertLink() {
-    const url = window.prompt("연결할 주소를 입력하세요", "https://");
-    if (url?.trim()) runCommand("createLink", url.trim());
-  }
-
-  function optimizeImage(file: File) {
-    return new Promise<string>((resolve, reject) => {
-      if (!file.type.startsWith("image/")) return reject(new Error("이미지 파일만 등록할 수 있습니다."));
-      if (file.size > 10 * 1024 * 1024) return reject(new Error("이미지는 10MB 이하만 등록할 수 있습니다."));
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error("이미지 파일을 읽지 못했습니다."));
-      reader.onload = () => {
-        const image = new Image();
-        image.onerror = () => reject(new Error("이미지를 처리하지 못했습니다."));
-        image.onload = () => {
-          const maxSize = 1400;
-          const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.max(1, Math.round(image.width * scale));
-          canvas.height = Math.max(1, Math.round(image.height * scale));
-          const context = canvas.getContext("2d");
-          if (!context) return reject(new Error("이미지를 처리하지 못했습니다."));
-          context.drawImage(image, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL("image/webp", 0.82));
-        };
-        image.src = String(reader.result);
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function insertImageFiles(files: File[]) {
-    const images = files.filter((file) => file.type.startsWith("image/"));
-    if (!images.length) return;
-    setImageError("");
-    setIsProcessingImage(true);
-    try {
-      for (const file of images) {
-        const dataUrl = await optimizeImage(file);
-        const alt = file.name.replace(/[&<>"']/g, "");
-        runCommand("insertHTML", `<figure class="editor-image"><img src="${dataUrl}" alt="${alt}"><figcaption>${alt}</figcaption></figure><div><br></div>`);
-      }
-    } catch (error) {
-      setImageError(error instanceof Error ? error.message : "이미지를 등록하지 못했습니다.");
-    } finally {
-      setIsProcessingImage(false);
-      if (imageInputRef.current) imageInputRef.current.value = "";
-    }
-  }
-
   function startEditing() {
     setDraft(value);
-    setImageError("");
     setIsEditing(true);
     savedRangeRef.current = null;
   }
 
   function cancelEditing() {
     setDraft(value);
-    setImageError("");
     setOpenMenu(null);
     setIsEditing(false);
     savedRangeRef.current = null;
@@ -221,18 +166,7 @@ function RichTextEditor({ value, onSave }: { value: string; onSave: (value: stri
             {openMenu === "list" && <div className="editor-popover list-popover"><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("bullet"); }}><span>•</span>글머리 기호 목록<kbd>Ctrl+Shift+8</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("number"); }}><span>1.</span>번호 목록<kbd>Ctrl+Shift+7</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("task"); }}><span>☑</span>작업 목록<kbd>Ctrl+Shift+6</kbd></button></div>}
           </div>
           <span className="toolbar-divider" />
-          <button type="button" title="링크" aria-label="링크 삽입" onMouseDown={(event) => { event.preventDefault(); insertLink(); }}>↗</button>
-          <button type="button" title="이미지 파일 선택" aria-label="이미지 파일 선택" disabled={isProcessingImage} onMouseDown={(event) => { event.preventDefault(); imageInputRef.current?.click(); }}>▧</button>
-          <input ref={imageInputRef} className="sr-only" type="file" accept="image/*" multiple onChange={(event) => { void insertImageFiles(Array.from(event.target.files ?? [])); }} />
           <button type="button" title="코드 블록" aria-label="코드 블록" onMouseDown={(event) => { event.preventDefault(); runCommand("formatBlock", "pre"); }}>&lt;/&gt;</button>
-          <div className="editor-menu-wrap">
-            <button type="button" className={openMenu === "emoji" ? "active" : ""} title="이모지" aria-label="이모지 선택" aria-expanded={openMenu === "emoji"} onMouseDown={(event) => { event.preventDefault(); setOpenMenu(openMenu === "emoji" ? null : "emoji"); }}>☺</button>
-            {openMenu === "emoji" && <div className="editor-popover emoji-popover">{["🙂", "✅", "🚀", "💡", "🎯", "⚠️"].map((emoji) => <button key={emoji} type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertText", emoji); }}>{emoji}</button>)}</div>}
-          </div>
-          <span className="toolbar-divider" />
-          <button type="button" title="실행 취소 (Ctrl+Z)" aria-label="실행 취소" onMouseDown={(event) => { event.preventDefault(); runCommand("undo"); }}>↶</button>
-          <button type="button" title="다시 실행" aria-label="다시 실행" onMouseDown={(event) => { event.preventDefault(); runCommand("redo"); }}>↷</button>
-          <button type="button" title="서식 지우기" aria-label="서식 지우기" onMouseDown={(event) => { event.preventDefault(); runCommand("removeFormat"); }}>Tx</button>
         </div>
         <div
           ref={editorRef}
@@ -247,16 +181,10 @@ function RichTextEditor({ value, onSave }: { value: string; onSave: (value: stri
           onMouseUp={saveSelection}
           onKeyUp={saveSelection}
           onFocus={saveSelection}
-          onPaste={(event) => {
-            const imageFiles = Array.from(event.clipboardData.items).filter((item) => item.kind === "file" && item.type.startsWith("image/")).map((item) => item.getAsFile()).filter((file): file is File => Boolean(file));
-            event.preventDefault();
-            if (imageFiles.length) void insertImageFiles(imageFiles);
-            else runCommand("insertText", event.clipboardData.getData("text/plain"));
-          }}
+          onPaste={(event) => { event.preventDefault(); runCommand("insertText", event.clipboardData.getData("text/plain")); }}
         />
       </div>
-      <div className="description-editor-meta"><span>{isProcessingImage ? "이미지를 최적화하는 중..." : "이미지 파일 선택 또는 복사·붙여넣기 가능 (최대 10MB)"}</span>{imageError && <strong role="alert">{imageError}</strong>}</div>
-      <div className="description-actions"><button type="button" className="description-cancel" onClick={cancelEditing}>취소하기</button><button type="button" className="description-save" onClick={saveDescription} disabled={isProcessingImage}>저장하기</button></div>
+      <div className="description-actions"><button type="button" className="description-cancel" onClick={cancelEditing}>취소하기</button><button type="button" className="description-save" onClick={saveDescription}>저장하기</button></div>
     </div>
   );
 }

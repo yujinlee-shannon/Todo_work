@@ -205,6 +205,10 @@ export default function Home() {
   const [priorityFilter, setPriorityFilter] = useState<Priority | "all">("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isProjectCreateOpen, setIsProjectCreateOpen] = useState(false);
+  const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
+  const [isProjectEditOpen, setIsProjectEditOpen] = useState(false);
+  const [isProjectDeleteOpen, setIsProjectDeleteOpen] = useState(false);
+  const [editingProjectName, setEditingProjectName] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newPriority, setNewPriority] = useState<Priority>("medium");
@@ -377,6 +381,34 @@ export default function Home() {
     setSearch("");
     setPriorityFilter("all");
     setSelectedTaskId(null);
+    setIsProjectMenuOpen(false);
+  }
+
+  function openProjectEdit() {
+    if (!activeProject) return;
+    setEditingProjectName(activeProject.name);
+    setIsProjectMenuOpen(false);
+    setIsProjectEditOpen(true);
+  }
+
+  function renameProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = editingProjectName.trim();
+    if (!name || !activeProject) return;
+    setProjects((current) => current.map((project) => project.id === activeProject.id ? { ...project, name } : project));
+    setIsProjectEditOpen(false);
+  }
+
+  function deleteProject() {
+    if (!activeProject || projects.length <= 1) return;
+    const remainingProjects = projects.filter((project) => project.id !== activeProject.id);
+    setProjects(remainingProjects);
+    setActiveProjectId(remainingProjects[0].id);
+    setActiveView("board");
+    setSearch("");
+    setPriorityFilter("all");
+    setSelectedTaskId(null);
+    setIsProjectDeleteOpen(false);
   }
 
   return (
@@ -438,7 +470,7 @@ export default function Home() {
           {activeView === "board" ? <>
           <div className="board-heading">
             <div><h1 id="board-title">나의 업무 보드</h1><p>오늘의 업무를 한눈에 확인하고 다음 단계로 이동하세요.</p></div>
-            <div className="heading-actions"><button className="secondary-button">공유</button><button className="more-button" aria-label="추가 메뉴">•••</button></div>
+            <div className="heading-actions"><button className="secondary-button">공유</button><div className="project-menu-wrap"><button type="button" className="more-button" aria-label="프로젝트 메뉴" aria-expanded={isProjectMenuOpen} onClick={() => setIsProjectMenuOpen((open) => !open)}>•••</button>{isProjectMenuOpen && <div className="project-menu" role="menu" aria-label="프로젝트 관리"><button type="button" role="menuitem" onClick={openProjectEdit}>프로젝트 이름 수정</button><button type="button" role="menuitem" className="project-menu-delete" onClick={() => { setIsProjectMenuOpen(false); setIsProjectDeleteOpen(true); }}>프로젝트 삭제</button></div>}</div></div>
           </div>
 
           <div className="summary-row">
@@ -575,6 +607,28 @@ export default function Home() {
 
             <footer className="detail-footer"><button type="button" className="detail-delete" onClick={() => deleteTask(selectedTask.id)}>업무 삭제</button><span>변경사항은 자동 저장됩니다</span></footer>
           </aside>
+        </div>
+      )}
+
+      {isProjectEditOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsProjectEditOpen(false); }}>
+          <section className="create-modal" role="dialog" aria-modal="true" aria-labelledby="project-edit-title">
+            <header><div><span className="modal-type-icon project-modal-icon">✎</span><div><small>PROJECT SETTINGS</small><h2 id="project-edit-title">프로젝트 이름 수정</h2></div></div><button aria-label="닫기" onClick={() => setIsProjectEditOpen(false)}>×</button></header>
+            <form onSubmit={renameProject}>
+              <label htmlFor="project-edit-name">프로젝트 이름 <b>*</b></label>
+              <input id="project-edit-name" autoFocus value={editingProjectName} onChange={(event) => setEditingProjectName(event.target.value)} maxLength={40} />
+              <div className="modal-actions"><button type="button" onClick={() => setIsProjectEditOpen(false)}>취소</button><button className="create-submit" disabled={!editingProjectName.trim()}>저장하기</button></div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {isProjectDeleteOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsProjectDeleteOpen(false); }}>
+          <section className="create-modal delete-project-modal" role="dialog" aria-modal="true" aria-labelledby="project-delete-title">
+            <header><div><span className="modal-type-icon project-delete-icon">!</span><div><small>DELETE PROJECT</small><h2 id="project-delete-title">프로젝트 삭제</h2></div></div><button aria-label="닫기" onClick={() => setIsProjectDeleteOpen(false)}>×</button></header>
+            <div className="project-delete-content"><p><strong>{activeProject?.name}</strong> 프로젝트와 안에 있는 모든 업무가 삭제됩니다.</p>{projects.length <= 1 && <p className="project-delete-warning">마지막 프로젝트는 삭제할 수 없습니다. 새 프로젝트를 만든 뒤 다시 시도해주세요.</p>}<div className="modal-actions"><button type="button" onClick={() => setIsProjectDeleteOpen(false)}>취소</button><button type="button" className="delete-project-confirm" disabled={projects.length <= 1} onClick={deleteProject}>프로젝트 삭제</button></div></div>
+          </section>
         </div>
       )}
 

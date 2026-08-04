@@ -79,6 +79,12 @@ button { color:inherit; }
 .secondary-button { padding:0 14px; }
 .more-button { width:38px; }
 .secondary-button:hover,.more-button:hover { background:#f1f2f4; }
+.project-menu-wrap { position:relative; }
+.project-menu { position:absolute; top:42px; right:0; z-index:20; display:grid; width:172px; overflow:hidden; border:1px solid var(--line); border-radius:7px; padding:4px; background:#fff; box-shadow:0 8px 18px rgba(9,30,66,.18); }
+.project-menu button { height:34px; border:0; border-radius:4px; padding:0 9px; color:#172b4d; background:transparent; font-size:11px; font-weight:650; text-align:left; cursor:pointer; }
+.project-menu button:hover { background:#f1f2f4; }
+.project-menu .project-menu-delete { color:#ae2e24; }
+.project-menu .project-menu-delete:hover { background:#ffebe6; }
 
 .summary-row { display:grid; grid-template-columns:repeat(3,minmax(130px,170px)) minmax(240px,1fr); gap:12px; margin:26px 0 22px; }
 .summary-card,.completion-card { min-height:76px; border:1px solid var(--line); border-radius:9px; background:#fff; box-shadow:0 1px 2px rgba(9,30,66,.08); }
@@ -291,6 +297,13 @@ button { color:inherit; }
 .create-modal form>input:focus,.create-modal form>select:focus { border-color:var(--blue); box-shadow:0 0 0 1px var(--blue); }
 .project-modal-icon { background:linear-gradient(145deg,#6554c0,#0c66e4); }
 .project-create-help { margin:10px 0 0; color:var(--muted); font-size:11px; line-height:1.5; }
+.project-delete-icon { color:#ae2e24; background:#ffebe6; }
+.project-delete-content { padding:22px; }
+.project-delete-content>p { margin:0; color:#44546f; font-size:12px; line-height:1.6; }
+.project-delete-warning { margin-top:10px!important; border-radius:6px; padding:9px 10px; color:#974f0c!important; background:#fff3eb; font-size:10px!important; }
+.delete-project-confirm { color:#fff!important; background:#c9372c!important; }
+.delete-project-confirm:hover { background:#ae2e24!important; }
+.delete-project-confirm:disabled { opacity:.45; cursor:not-allowed; }
 .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:26px; }
 .modal-actions button { height:36px; border:0; border-radius:5px; padding:0 14px; background:#f1f2f4; font-size:12px; font-weight:700; cursor:pointer; }
 .modal-actions .create-submit { color:#fff; background:var(--blue); }

@@ -236,6 +236,7 @@ export default function Home() {
   const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
 
@@ -401,6 +402,21 @@ export default function Home() {
     updateActiveTasks((current) => current.map((task) => task.id === id ? { ...task, status } : task));
   }
 
+  function reorderTask(id: string, targetId: string | null, status: Status) {
+    updateActiveTasks((current) => {
+      const movingTask = current.find((task) => task.id === id);
+      if (!movingTask) return current;
+      const remaining = current.filter((task) => task.id !== id);
+      const nextTask = { ...movingTask, status };
+      const targetIndex = targetId ? remaining.findIndex((task) => task.id === targetId) : -1;
+      const destinationIndex = targetIndex >= 0
+        ? targetIndex
+        : remaining.reduce((lastIndex, task, index) => task.status === status ? index : lastIndex, -1) + 1;
+      remaining.splice(destinationIndex, 0, nextTask);
+      return remaining;
+    });
+  }
+
   function updateTask(id: string, patch: Partial<Pick<Task, "title" | "status" | "priority" | "description">>) {
     updateActiveTasks((current) => current.map((task) => task.id === id ? { ...task, ...patch } : task));
   }
@@ -547,7 +563,7 @@ export default function Home() {
                   className={`board-column ${draggingId ? "drag-active" : ""}`}
                   key={column.id}
                   onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => { if (draggingId) moveTask(draggingId, column.id); setDraggingId(null); }}
+                  onDrop={() => { if (draggingId) reorderTask(draggingId, null, column.id); setDraggingId(null); setDropTargetId(null); }}
                 >
                   <header className="column-header">
                     <div><h2>{column.label}<span>{columnTasks.length}</span></h2><p>{column.hint}</p></div>
@@ -558,15 +574,18 @@ export default function Home() {
                       <div className="column-empty"><span>＋</span><p>여기에 업무를 놓으세요</p></div>
                     ) : columnTasks.map((task) => (
                       <article
-                        className={`task-card ${selectedTaskId === task.id ? "selected" : ""}`}
+                        className={`task-card ${selectedTaskId === task.id ? "selected" : ""} ${dropTargetId === task.id && draggingId !== task.id ? "drag-over" : ""}`}
                         key={task.id}
                         draggable
                         tabIndex={0}
                         aria-label={`${task.title} 상세 보기`}
                         onClick={(event) => { if (!(event.target as HTMLElement).closest("button, select, input, textarea, form")) setSelectedTaskId(task.id); }}
                         onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setSelectedTaskId(task.id); } }}
-                        onDragStart={() => setDraggingId(task.id)}
-                        onDragEnd={() => setDraggingId(null)}
+                        onDragStart={() => { setDraggingId(task.id); setDropTargetId(null); }}
+                        onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); if (draggingId !== task.id) setDropTargetId(task.id); }}
+                        onDragLeave={() => { if (dropTargetId === task.id) setDropTargetId(null); }}
+                        onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (draggingId && draggingId !== task.id) reorderTask(draggingId, task.id, column.id); setDraggingId(null); setDropTargetId(null); }}
+                        onDragEnd={() => { setDraggingId(null); setDropTargetId(null); }}
                       >
                         <div className="task-card-top">
                           <span className={`type-icon ${task.status}`}>{task.status === "done" ? "✓" : "□"}</span>

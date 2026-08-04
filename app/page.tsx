@@ -41,7 +41,6 @@ const PRIORITY_LABEL: Record<Priority, string> = { high: "높음", medium: "보�
 function RichTextEditor({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
-  const [openMenu, setOpenMenu] = useState<"list" | null>(null);
   const [isEditing, setIsEditing] = useState(!value.trim());
   const [draft, setDraft] = useState(value);
 
@@ -100,11 +99,12 @@ function RichTextEditor({ value, onSave }: { value: string; onSave: (value: stri
     restoreSelection();
     document.execCommand(command, false, commandValue);
     emitDraft();
-    setOpenMenu(null);
   }
 
   function insertList(type: "bullet" | "number" | "task") {
-    editorRef.current?.focus();
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
     restoreSelection();
     const selection = window.getSelection();
     const selectedLines = (selection?.toString() ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -112,7 +112,18 @@ function RichTextEditor({ value, onSave }: { value: string; onSave: (value: stri
     const escapeText = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const items = lines.map((line) => `<li>${type === "task" ? '<span class="task-box">☐</span>&nbsp;' : ""}${line ? escapeText(line) : "<br>"}</li>`).join("");
     const tag = type === "number" ? "ol" : "ul";
-    runCommand("insertHTML", `<${tag}${type === "task" ? ' class="task-list"' : ""}>${items}</${tag}><div><br></div>`);
+    document.execCommand("insertHTML", false, `<${tag}${type === "task" ? ' class="task-list"' : ""}>${items}</${tag}>`);
+    const insertedLists = editor.querySelectorAll(type === "number" ? "ol" : "ul");
+    const lastItem = insertedLists.item(insertedLists.length - 1)?.lastElementChild;
+    if (lastItem && selection) {
+      const range = document.createRange();
+      range.selectNodeContents(lastItem);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      savedRangeRef.current = range;
+    }
+    emitDraft();
   }
 
   function startEditing() {
@@ -123,7 +134,6 @@ function RichTextEditor({ value, onSave }: { value: string; onSave: (value: stri
 
   function cancelEditing() {
     setDraft(value);
-    setOpenMenu(null);
     setIsEditing(false);
     savedRangeRef.current = null;
   }
@@ -136,7 +146,6 @@ function RichTextEditor({ value, onSave }: { value: string; onSave: (value: stri
     const savedValue = hasContent ? clean : "";
     onSave(savedValue);
     setDraft(savedValue);
-    setOpenMenu(null);
     setIsEditing(false);
     savedRangeRef.current = null;
   }
@@ -161,10 +170,9 @@ function RichTextEditor({ value, onSave }: { value: string; onSave: (value: stri
           <button type="button" title="기울임" aria-label="기울임" onMouseDown={(event) => { event.preventDefault(); runCommand("italic"); }}><i>I</i></button>
           <button type="button" title="밑줄 (Ctrl+U)" aria-label="밑줄" onMouseDown={(event) => { event.preventDefault(); runCommand("underline"); }}><u>U</u></button>
           <label className="color-tool" title="글자 색상"><span>A</span><input type="color" aria-label="글자 색상" defaultValue="#172b4d" onChange={(event) => runCommand("foreColor", event.target.value)} /></label>
-          <div className="editor-menu-wrap">
-            <button type="button" className={openMenu === "list" ? "active" : ""} title="목록" aria-label="목록 선택" aria-expanded={openMenu === "list"} onMouseDown={(event) => { event.preventDefault(); setOpenMenu(openMenu === "list" ? null : "list"); }}>☷</button>
-            {openMenu === "list" && <div className="editor-popover list-popover"><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("bullet"); }}><span>•</span>글머리 기호 목록<kbd>Ctrl+Shift+8</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("number"); }}><span>1.</span>번호 목록<kbd>Ctrl+Shift+7</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("task"); }}><span>☑</span>작업 목록<kbd>Ctrl+Shift+6</kbd></button></div>}
-          </div>
+          <button type="button" className="editor-list-button" title="글머리 기호 목록" aria-label="글머리 기호 목록" onMouseDown={(event) => { event.preventDefault(); insertList("bullet"); }}>•</button>
+          <button type="button" className="editor-list-button editor-number-button" title="번호 목록" aria-label="번호 목록" onMouseDown={(event) => { event.preventDefault(); insertList("number"); }}>1.</button>
+          <button type="button" className="editor-list-button" title="작업 목록" aria-label="작업 목록" onMouseDown={(event) => { event.preventDefault(); insertList("task"); }}>☐</button>
           <span className="toolbar-divider" />
           <button type="button" title="코드 블록" aria-label="코드 블록" onMouseDown={(event) => { event.preventDefault(); runCommand("formatBlock", "pre"); }}>&lt;/&gt;</button>
         </div>

@@ -229,11 +229,7 @@ button { color:inherit; }
 .rich-editor-content img { display:block; max-width:100%; height:auto; margin:10px auto; border-radius:7px; box-shadow:0 1px 4px rgba(9,30,66,.16); }
 .rich-editor-content .editor-image { margin:12px 0; }
 .rich-editor-content .editor-image figcaption { margin-top:6px; color:var(--muted); font-size:9px; text-align:center; }
-.activity-item { position:relative; display:flex; gap:12px; padding-left:3px; }
-.activity-dot { flex:0 0 10px; width:10px; height:10px; margin-top:4px; border:2px solid #fff; border-radius:50%; background:#22a06b; box-shadow:0 0 0 2px #baf3db; }
-.activity-item strong,.activity-item time { display:block; }
-.activity-item strong { color:#44546f; font-size:11px; }
-.activity-item time { margin-top:5px; color:var(--muted); font-size:10px; }
+
 .detail-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:64px; padding:12px 20px; border-top:1px solid var(--line); background:#fafbfc; }
 .detail-footer span { color:var(--muted); font-size:9px; }
 .detail-delete { height:34px; border:0; border-radius:6px; padding:0 12px; color:#ae2e24; background:#ffebe6; font-size:11px; font-weight:700; cursor:pointer; }

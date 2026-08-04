@@ -501,10 +501,7 @@ export default function Home() {
                 <RichTextEditor key={selectedTask.id} value={selectedTask.description ?? ""} onSave={(description) => updateTask(selectedTask.id, { description })} />
               </section>
 
-              <section className="detail-section activity-section">
-                <h3>활동</h3>
-                <div className="activity-item"><span className="activity-dot" /><div><strong>업무가 생성되었습니다.</strong><time>{new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(selectedTask.createdAt))}</time></div></div>
-              </section>
+
             </div>
 
             <footer className="detail-footer"><button type="button" className="detail-delete" onClick={() => deleteTask(selectedTask.id)}>업무 삭제</button><span>변경사항은 자동 저장됩니다</span></footer>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
@@ -14,6 +14,15 @@ type Task = {
 };
 
 const STORAGE_KEY = "one-step-todos";
+const BOARD_INIT_KEY = "one-step-board-initialized";
+const STARTER_TASKS: Task[] = [
+  { id: "starter-1", key: "TASK-001", title: "이번 주 업무 우선순위 정리", status: "todo", priority: "high", createdAt: Date.now() },
+  { id: "starter-2", key: "TASK-002", title: "프로젝트 README 정리", status: "todo", priority: "medium", createdAt: Date.now() },
+  { id: "starter-3", key: "TASK-003", title: "보드 화면 디자인 적용", status: "progress", priority: "high", createdAt: Date.now() },
+  { id: "starter-4", key: "TASK-004", title: "미리보기 동작 확인", status: "progress", priority: "medium", createdAt: Date.now() },
+  { id: "starter-5", key: "TASK-005", title: "GitHub 저장소 연결", status: "done", priority: "low", createdAt: Date.now() },
+  { id: "starter-6", key: "TASK-006", title: "기본 투두 기능 구현", status: "done", priority: "medium", createdAt: Date.now() },
+];
 const COLUMNS: { id: Status; label: string; hint: string }[] = [
   { id: "todo", label: "할 일", hint: "아직 시작하지 않은 업무" },
   { id: "progress", label: "진행 중", hint: "지금 집중하고 있는 업무" },
@@ -37,7 +46,7 @@ export default function Home() {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       const parsed = saved ? JSON.parse(saved) : [];
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         setTasks(parsed.map((item, index) => ({
           id: String(item.id ?? crypto.randomUUID()),
           key: item.key ?? `TASK-${String(index + 1).padStart(3, "0")}`,
@@ -46,6 +55,9 @@ export default function Home() {
           priority: item.priority ?? "medium",
           createdAt: Number(item.createdAt ?? Date.now()),
         })));
+      } else if (!window.localStorage.getItem(BOARD_INIT_KEY)) {
+        setTasks(STARTER_TASKS);
+        window.localStorage.setItem(BOARD_INIT_KEY, "true");
       }
     } catch {}
     setIsReady(true);

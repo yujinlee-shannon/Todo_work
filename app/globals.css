@@ -54,6 +54,8 @@ button { color:inherit; }
 .side-divider { height:1px; margin:18px 8px; background:var(--line); }
 .storage-note { position:absolute; right:18px; bottom:18px; left:18px; display:flex; align-items:center; gap:8px; margin:0; color:var(--muted); font-size:10px; }
 .storage-note span { width:7px; height:7px; border-radius:50%; background:#22a06b; box-shadow:0 0 0 3px #dffcf0; }
+.storage-note.is-error { color:#ae2e24; }
+.storage-note.is-error span { background:#c9372c; box-shadow:0 0 0 3px #ffebe6; }
 
 .main-content { min-width:0; padding:28px 34px 46px; }
 .breadcrumbs { display:flex; align-items:center; gap:8px; margin-bottom:20px; color:var(--muted); font-size:12px; }

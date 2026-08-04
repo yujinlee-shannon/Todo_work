@@ -38,6 +38,28 @@ const COLUMNS: { id: Status; label: string; hint: string }[] = [
 ];
 const PRIORITY_LABEL: Record<Priority, string> = { high: "높음", medium: "보통", low: "낮음" };
 
+function normalizeProjects(items: unknown[]): Project[] {
+  return items.map((value, projectIndex) => {
+    const project = value as Partial<Project>;
+    const rawTasks = Array.isArray(project.tasks) ? project.tasks : [];
+    return {
+      id: String(project.id ?? crypto.randomUUID()),
+      name: String(project.name ?? `프로젝트 ${projectIndex + 1}`),
+      tasks: rawTasks.map((value, taskIndex) => {
+        const task = value as Partial<Task> & { completed?: boolean };
+        return {
+          id: String(task.id ?? crypto.randomUUID()),
+          key: task.key ?? `TASK-${String(taskIndex + 1).padStart(3, "0")}`,
+          title: String(task.title ?? "제목 없는 업무"),
+          status: task.status === "progress" || task.status === "done" ? task.status : task.completed ? "done" : "todo",
+          priority: task.priority === "high" || task.priority === "low" ? task.priority : "medium",
+          createdAt: Number(task.createdAt ?? Date.now()),
+          description: String(task.description ?? ""),
+        };
+      }),
+    };
+  });
+}
 function RichTextEditor({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
@@ -215,52 +237,78 @@ export default function Home() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const normalizeTasks = (items: unknown[]): Task[] => items.map((value, index) => {
-        const item = value as Partial<Task> & { completed?: boolean };
-        return {
-          id: String(item.id ?? crypto.randomUUID()),
-          key: item.key ?? `TASK-${String(index + 1).padStart(3, "0")}`,
-          title: String(item.title ?? "제목 없는 업무"),
-          status: item.status ?? (item.completed ? "done" : "todo"),
-          priority: item.priority ?? "medium",
-          createdAt: Number(item.createdAt ?? Date.now()),
-          description: String(item.description ?? ""),
-        };
-      });
-      const savedProjects = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
-      const parsedProjects = savedProjects ? JSON.parse(savedProjects) : [];
-      let initialProjects: Project[];
-      if (Array.isArray(parsedProjects) && parsedProjects.length > 0) {
-        initialProjects = parsedProjects.map((value, index) => {
-          const project = value as Partial<Project>;
-          return {
-            id: String(project.id ?? crypto.randomUUID()),
-            name: String(project.name ?? `프로젝트 ${index + 1}`),
-            tasks: Array.isArray(project.tasks) ? normalizeTasks(project.tasks) : [],
-          };
-        });
-      } else {
-        const legacySaved = window.localStorage.getItem(STORAGE_KEY);
-        const legacyParsed = legacySaved ? JSON.parse(legacySaved) : [];
-        const legacyTasks = Array.isArray(legacyParsed) ? normalizeTasks(legacyParsed) : [];
-        const shouldSeed = legacySaved === null && !window.localStorage.getItem(BOARD_INIT_KEY);
-        initialProjects = [{ id: "project-one-step", name: "One Step", tasks: shouldSeed ? STARTER_TASKS : legacyTasks }];
-        if (shouldSeed) window.localStorage.setItem(BOARD_INIT_KEY, "true");
+    let cancelled = false;
+    async function initializeBoard() {
+      let localProjects: Project[] = [];
+      let savedActiveId: string | null = null;
+      try {
+        const savedProjects = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
+        const parsedProjects = savedProjects ? JSON.parse(savedProjects) : [];
+        if (Array.isArray(parsedProjects) && parsedProjects.length > 0) {
+          localProjects = normalizeProjects(parsedProjects);
+        } else {
+          const legacySaved = window.localStorage.getItem(STORAGE_KEY);
+          const legacyParsed = legacySaved ? JSON.parse(legacySaved) : [];
+          const legacyTasks = Array.isArray(legacyParsed) ? normalizeProjects([{ tasks: legacyParsed }])[0].tasks : [];
+          const shouldSeed = legacySaved === null && !window.localStorage.getItem(BOARD_INIT_KEY);
+          localProjects = [{ id: "project-one-step", name: "One Step", tasks: shouldSeed ? STARTER_TASKS : legacyTasks }];
+          if (shouldSeed) window.localStorage.setItem(BOARD_INIT_KEY, "true");
+        }
+        savedActiveId = window.localStorage.getItem(ACTIVE_PROJECT_KEY);
+      } catch {
+        localProjects = [{ id: "project-one-step", name: "One Step", tasks: STARTER_TASKS }];
       }
-      const savedActiveId = window.localStorage.getItem(ACTIVE_PROJECT_KEY);
+
+      let initialProjects = localProjects;
+      try {
+        const response = await fetch("/api/board", { cache: "no-store" });
+        if (!response.ok) throw new Error("공용 보드를 불러오지 못했습니다.");
+        const payload = await response.json() as { projects?: unknown };
+        const remoteProjects = Array.isArray(payload.projects) ? normalizeProjects(payload.projects) : [];
+        if (remoteProjects.length) {
+          initialProjects = remoteProjects;
+        } else if (localProjects.length) {
+          const seedResponse = await fetch("/api/board", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projects: localProjects }),
+          });
+          if (!seedResponse.ok) throw new Error("공용 보드에 데이터를 저장하지 못했습니다.");
+        }
+        setSyncError(null);
+      } catch {
+        setSyncError("공용 보드 연결에 실패했습니다. 다시 시도해주세요.");
+      }
+
+      if (cancelled) return;
       setProjects(initialProjects);
-      setActiveProjectId(initialProjects.some((project) => project.id === savedActiveId) ? savedActiveId! : initialProjects[0].id);
-    } catch {}
-    setIsReady(true);
+      setActiveProjectId(initialProjects.some((project) => project.id === savedActiveId) ? savedActiveId! : initialProjects[0]?.id ?? "");
+      setIsReady(true);
+    }
+    void initializeBoard();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || !projects.length) return;
     window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
     if (activeProjectId) window.localStorage.setItem(ACTIVE_PROJECT_KEY, activeProjectId);
+    void (async () => {
+      try {
+        const response = await fetch("/api/board", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projects }),
+        });
+        if (!response.ok) throw new Error("공용 보드 저장에 실패했습니다.");
+        setSyncError(null);
+      } catch {
+        setSyncError("공용 보드 연결에 실패했습니다. 다시 시도해주세요.");
+      }
+    })();
   }, [projects, activeProjectId, isReady]);
 
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0];
@@ -443,7 +491,7 @@ export default function Home() {
           <nav className="side-nav secondary">
             <button><span>⚙</span>프로젝트 설정</button>
           </nav>
-          <p className="storage-note"><span /> 이 기기에 자동 저장됨</p>
+          <p className={`storage-note ${syncError ? "is-error" : ""}`}><span /> {syncError ?? (isReady ? "공용 보드와 동기화됨" : "공용 보드 불러오는 중")}</p>
         </aside>
 
         <section className="main-content" aria-labelledby={activeView === "summary" ? "summary-title" : "board-title"}>

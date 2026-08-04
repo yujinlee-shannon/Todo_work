@@ -227,7 +227,7 @@ export default function Home() {
                         </div>
                       </article>
                     ))}
-                    <button className="add-in-column" onClick={() => setIsCreateOpen(true)}>＋ 업무 만들기</button>
+                    {column.id === "todo" && <button className="add-in-column" onClick={() => setIsCreateOpen(true)}>＋ 업무 만들기</button>}
                   </div>
                 </section>
               );

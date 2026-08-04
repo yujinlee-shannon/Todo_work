@@ -11,6 +11,7 @@ type Task = {
   status: Status;
   priority: Priority;
   createdAt: number;
+  description?: string;
 };
 type Project = {
   id: string;
@@ -47,8 +48,7 @@ export default function Home() {
   const [newProjectName, setNewProjectName] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newPriority, setNewPriority] = useState<Priority>("medium");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState("");
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
@@ -63,6 +63,7 @@ export default function Home() {
           status: item.status ?? (item.completed ? "done" : "todo"),
           priority: item.priority ?? "medium",
           createdAt: Number(item.createdAt ?? Date.now()),
+          description: String(item.description ?? ""),
         };
       });
       const savedProjects = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
@@ -100,6 +101,14 @@ export default function Home() {
 
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0];
   const tasks = activeProject?.tasks ?? [];
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
+
+  useEffect(() => {
+    if (!selectedTaskId) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setSelectedTaskId(null); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedTaskId]);
 
   function updateActiveTasks(updater: (tasks: Task[]) => Task[]) {
     setProjects((current) => current.map((project) => project.id === activeProjectId ? { ...project, tasks: updater(project.tasks) } : project));
@@ -135,6 +144,7 @@ export default function Home() {
       status: "todo",
       priority: newPriority,
       createdAt: Date.now(),
+      description: "",
     }, ...current]);
     setNewTitle("");
     setNewPriority("medium");
@@ -145,15 +155,13 @@ export default function Home() {
     updateActiveTasks((current) => current.map((task) => task.id === id ? { ...task, status } : task));
   }
 
-  function saveEdit(event: FormEvent<HTMLFormElement>, id: string) {
-    event.preventDefault();
-    const title = editingTitle.trim();
-    if (title) updateActiveTasks((current) => current.map((task) => task.id === id ? { ...task, title } : task));
-    setEditingId(null);
+  function updateTask(id: string, patch: Partial<Pick<Task, "title" | "status" | "priority" | "description">>) {
+    updateActiveTasks((current) => current.map((task) => task.id === id ? { ...task, ...patch } : task));
   }
 
   function deleteTask(id: string) {
     updateActiveTasks((current) => current.filter((task) => task.id !== id));
+    if (selectedTaskId === id) setSelectedTaskId(null);
   }
 
   function createProject(event: FormEvent<HTMLFormElement>) {
@@ -173,7 +181,7 @@ export default function Home() {
     setActiveProjectId(id);
     setSearch("");
     setPriorityFilter("all");
-    setEditingId(null);
+    setSelectedTaskId(null);
   }
 
   return (
@@ -274,28 +282,27 @@ export default function Home() {
                       <div className="column-empty"><span>＋</span><p>여기에 업무를 놓으세요</p></div>
                     ) : columnTasks.map((task) => (
                       <article
-                        className="task-card"
+                        className={`task-card ${selectedTaskId === task.id ? "selected" : ""}`}
                         key={task.id}
                         draggable
+                        tabIndex={0}
+                        aria-label={`${task.title} 상세 보기`}
+                        onClick={(event) => { if (!(event.target as HTMLElement).closest("button, select, input, textarea, form")) setSelectedTaskId(task.id); }}
+                        onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setSelectedTaskId(task.id); } }}
                         onDragStart={() => setDraggingId(task.id)}
                         onDragEnd={() => setDraggingId(null)}
                       >
                         <div className="task-card-top">
                           <span className={`type-icon ${task.status}`}>{task.status === "done" ? "✓" : "□"}</span>
                           <span className="task-key">{task.key}</span>
-                          <button className="card-more" aria-label={`${task.title} 삭제`} onClick={() => deleteTask(task.id)}>×</button>
+                          <button className="card-more" aria-label={`${task.title} 삭제`} onClick={(event) => { event.stopPropagation(); deleteTask(task.id); }}>×</button>
                         </div>
-                        {editingId === task.id ? (
-                          <form className="edit-task" onSubmit={(event) => saveEdit(event, task.id)}>
-                            <input autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setEditingId(null); }} />
-                            <button>저장</button>
-                          </form>
-                        ) : <button className="task-title" onDoubleClick={() => { setEditingId(task.id); setEditingTitle(task.title); }}>{task.title}</button>}
+                        <button className="task-title" onClick={(event) => { event.stopPropagation(); setSelectedTaskId(task.id); }}>{task.title}</button>
                         <div className="task-meta">
                           <span className={`priority ${task.priority}`} title={`우선순위 ${PRIORITY_LABEL[task.priority]}`}>{task.priority === "high" ? "↑" : task.priority === "low" ? "↓" : "＝"}</span>
                           <div className="status-control">
                             <label className="sr-only" htmlFor={`status-${task.id}`}>상태 변경</label>
-                            <select id={`status-${task.id}`} value={task.status} onChange={(event) => moveTask(task.id, event.target.value as Status)}>
+                            <select id={`status-${task.id}`} value={task.status} onClick={(event) => event.stopPropagation()} onChange={(event) => moveTask(task.id, event.target.value as Status)}>
                               <option value="todo">할 일</option><option value="progress">진행 중</option><option value="done">완료</option>
                             </select>
                           </div>
@@ -311,6 +318,49 @@ export default function Home() {
           </div>
         </section>
       </div>
+
+      {selectedTask && (
+        <div className="detail-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTaskId(null); }}>
+          <aside className="task-detail-panel" role="dialog" aria-modal="true" aria-labelledby="detail-task-title">
+            <header className="detail-header">
+              <div>
+                <span className={`detail-type-icon ${selectedTask.status}`}>{selectedTask.status === "done" ? "✓" : "□"}</span>
+                <div><small>{activeProject?.name}</small><strong>{selectedTask.key}</strong></div>
+              </div>
+              <button type="button" className="detail-close" aria-label="상세 패널 닫기" onClick={() => setSelectedTaskId(null)}>×</button>
+            </header>
+
+            <div className="detail-content">
+              <section className="detail-title-section">
+                <label htmlFor="detail-task-title">업무 제목</label>
+                <textarea id="detail-task-title" rows={2} value={selectedTask.title} onChange={(event) => updateTask(selectedTask.id, { title: event.target.value })} />
+              </section>
+
+              <section className="detail-section">
+                <h3>세부 정보</h3>
+                <div className="detail-field-grid">
+                  <label><span>상태</span><select value={selectedTask.status} onChange={(event) => updateTask(selectedTask.id, { status: event.target.value as Status })}><option value="todo">할 일</option><option value="progress">진행 중</option><option value="done">완료</option></select></label>
+                  <label><span>우선순위</span><select value={selectedTask.priority} onChange={(event) => updateTask(selectedTask.id, { priority: event.target.value as Priority })}><option value="high">높음</option><option value="medium">보통</option><option value="low">낮음</option></select></label>
+                </div>
+                <div className="detail-info-row"><span>담당자</span><div className="detail-assignee"><span className="avatar">YL</span><strong>Yujin Lee</strong></div></div>
+                <div className="detail-info-row"><span>프로젝트</span><strong>{activeProject?.name}</strong></div>
+              </section>
+
+              <section className="detail-section">
+                <h3>설명</h3>
+                <textarea className="detail-description" rows={7} value={selectedTask.description ?? ""} onChange={(event) => updateTask(selectedTask.id, { description: event.target.value })} placeholder="업무에 필요한 내용, 참고 사항, 완료 기준을 적어보세요." />
+              </section>
+
+              <section className="detail-section activity-section">
+                <h3>활동</h3>
+                <div className="activity-item"><span className="activity-dot" /><div><strong>업무가 생성되었습니다.</strong><time>{new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(selectedTask.createdAt))}</time></div></div>
+              </section>
+            </div>
+
+            <footer className="detail-footer"><button type="button" className="detail-delete" onClick={() => deleteTask(selectedTask.id)}>업무 삭제</button><span>변경사항은 자동 저장됩니다</span></footer>
+          </aside>
+        </div>
+      )}
 
       {isProjectCreateOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsProjectCreateOpen(false); }}>

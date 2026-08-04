@@ -205,6 +205,10 @@ button { color:inherit; }
 .rich-editor-content h3 { margin:4px 0 8px; font-size:15px; }
 .rich-editor-content blockquote { margin:8px 0; border-left:3px solid #b7bec8; padding-left:10px; color:#44546f; }
 .rich-editor-content ul,.rich-editor-content ol { margin:7px 0; padding-left:22px; }
+.rich-editor-content li { min-height:20px; padding-left:2px; }
+.rich-editor-content .task-list { padding-left:4px; list-style:none; }
+.rich-editor-content .task-list li { display:flex; align-items:flex-start; gap:5px; }
+.rich-editor-content .task-box { flex:0 0 auto; color:var(--blue); font-size:14px; line-height:1.45; }
 .rich-editor-content pre { overflow-x:auto; margin:8px 0; border-radius:6px; padding:10px; color:#f4f5f7; background:#172b4d; font-family:Consolas,monospace; font-size:11px; }
 .rich-editor-content a { color:var(--blue); text-decoration:underline; }
 .rich-editor-content img { display:block; max-width:100%; height:auto; margin:10px 0; border-radius:6px; }

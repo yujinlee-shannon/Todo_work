@@ -69,10 +69,18 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
   }
 
   function restoreSelection() {
+    const editor = editorRef.current;
     const selection = window.getSelection();
-    if (!selection || !savedRangeRef.current) return;
+    if (!editor || !selection) return;
+    let range = savedRangeRef.current;
+    if (!range || !editor.contains(range.commonAncestorContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      savedRangeRef.current = range;
+    }
     selection.removeAllRanges();
-    selection.addRange(savedRangeRef.current);
+    selection.addRange(range);
   }
 
   function emitChange() {
@@ -86,6 +94,18 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     document.execCommand(command, false, commandValue);
     emitChange();
     setOpenMenu(null);
+  }
+
+  function insertList(type: "bullet" | "number" | "task") {
+    editorRef.current?.focus();
+    restoreSelection();
+    const selection = window.getSelection();
+    const selectedLines = (selection?.toString() ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const lines = selectedLines.length ? selectedLines : [""];
+    const escapeText = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const items = lines.map((line) => `<li>${type === "task" ? '<span class="task-box">☐</span>&nbsp;' : ""}${line ? escapeText(line) : "<br>"}</li>`).join("");
+    const tag = type === "number" ? "ol" : "ul";
+    runCommand("insertHTML", `<${tag}${type === "task" ? ' class="task-list"' : ""}>${items}</${tag}><div><br></div>`);
   }
 
   function insertLink() {
@@ -110,7 +130,7 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
         <label className="color-tool" title="글자 색상"><span>A</span><input type="color" aria-label="글자 색상" defaultValue="#172b4d" onChange={(event) => runCommand("foreColor", event.target.value)} /></label>
         <div className="editor-menu-wrap">
           <button type="button" className={openMenu === "list" ? "active" : ""} title="목록" aria-label="목록 선택" aria-expanded={openMenu === "list"} onMouseDown={(event) => { event.preventDefault(); setOpenMenu(openMenu === "list" ? null : "list"); }}>☷</button>
-          {openMenu === "list" && <div className="editor-popover list-popover"><button type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertUnorderedList"); }}><span>•</span>글머리 기호 목록<kbd>Ctrl+Shift+8</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertOrderedList"); }}><span>1.</span>번호 목록<kbd>Ctrl+Shift+7</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertHTML", "<div>☐&nbsp; 새 작업</div>"); }}><span>☑</span>작업 목록<kbd>Ctrl+Shift+6</kbd></button></div>}
+          {openMenu === "list" && <div className="editor-popover list-popover"><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("bullet"); }}><span>•</span>글머리 기호 목록<kbd>Ctrl+Shift+8</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("number"); }}><span>1.</span>번호 목록<kbd>Ctrl+Shift+7</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); insertList("task"); }}><span>☑</span>작업 목록<kbd>Ctrl+Shift+6</kbd></button></div>}
         </div>
         <span className="toolbar-divider" />
         <button type="button" title="링크" aria-label="링크 삽입" onMouseDown={(event) => { event.preventDefault(); insertLink(); }}>↗</button>

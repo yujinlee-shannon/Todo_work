@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Status = "todo" | "progress" | "done";
 type Priority = "high" | "medium" | "low";
@@ -37,6 +37,112 @@ const COLUMNS: { id: Status; label: string; hint: string }[] = [
   { id: "done", label: "완료", hint: "마무리된 업무" },
 ];
 const PRIORITY_LABEL: Record<Priority, string> = { high: "높음", medium: "보통", low: "낮음" };
+
+function RichTextEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+  const [openMenu, setOpenMenu] = useState<"list" | "emoji" | null>(null);
+
+  function safeHtml(html: string) {
+    const template = document.createElement("template");
+    const looksLikeHtml = /<\/?(div|p|br|ul|ol|li|b|strong|i|em|u|s|a|pre|code|span|font|img)\b/i.test(html);
+    template.innerHTML = looksLikeHtml ? html : html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+    template.content.querySelectorAll("script,style,iframe,object,embed").forEach((element) => element.remove());
+    template.content.querySelectorAll("*").forEach((element) => {
+      [...element.attributes].forEach((attribute) => {
+        if (attribute.name.startsWith("on") || (attribute.name === "href" && attribute.value.trim().toLowerCase().startsWith("javascript:"))) element.removeAttribute(attribute.name);
+      });
+    });
+    return template.innerHTML;
+  }
+
+  useEffect(() => {
+    if (!editorRef.current) return;
+    const nextHtml = safeHtml(value);
+    if (editorRef.current.innerHTML !== nextHtml) editorRef.current.innerHTML = nextHtml;
+  }, [value]);
+
+  function saveSelection() {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !editorRef.current?.contains(selection.anchorNode)) return;
+    savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+  }
+
+  function restoreSelection() {
+    const selection = window.getSelection();
+    if (!selection || !savedRangeRef.current) return;
+    selection.removeAllRanges();
+    selection.addRange(savedRangeRef.current);
+  }
+
+  function emitChange() {
+    if (editorRef.current) onChange(safeHtml(editorRef.current.innerHTML));
+    saveSelection();
+  }
+
+  function runCommand(command: string, commandValue?: string) {
+    editorRef.current?.focus();
+    restoreSelection();
+    document.execCommand(command, false, commandValue);
+    emitChange();
+    setOpenMenu(null);
+  }
+
+  function insertLink() {
+    const url = window.prompt("연결할 주소를 입력하세요", "https://");
+    if (url?.trim()) runCommand("createLink", url.trim());
+  }
+
+  function insertImage() {
+    const url = window.prompt("이미지 주소를 입력하세요", "https://");
+    if (url?.trim()) runCommand("insertImage", url.trim());
+  }
+
+  return (
+    <div className="rich-editor">
+      <div className="editor-toolbar" role="toolbar" aria-label="설명 서식 도구">
+        <select aria-label="문단 스타일" defaultValue="p" onChange={(event) => { runCommand("formatBlock", event.target.value); event.currentTarget.value = "p"; }}>
+          <option value="p">본문</option><option value="h2">제목 2</option><option value="h3">제목 3</option><option value="blockquote">인용</option>
+        </select>
+        <button type="button" title="굵게 (Ctrl+B)" aria-label="굵게" onMouseDown={(event) => { event.preventDefault(); runCommand("bold"); }}><b>B</b></button>
+        <button type="button" title="기울임" aria-label="기울임" onMouseDown={(event) => { event.preventDefault(); runCommand("italic"); }}><i>I</i></button>
+        <button type="button" title="밑줄 (Ctrl+U)" aria-label="밑줄" onMouseDown={(event) => { event.preventDefault(); runCommand("underline"); }}><u>U</u></button>
+        <label className="color-tool" title="글자 색상"><span>A</span><input type="color" aria-label="글자 색상" defaultValue="#172b4d" onChange={(event) => runCommand("foreColor", event.target.value)} /></label>
+        <div className="editor-menu-wrap">
+          <button type="button" className={openMenu === "list" ? "active" : ""} title="목록" aria-label="목록 선택" aria-expanded={openMenu === "list"} onMouseDown={(event) => { event.preventDefault(); setOpenMenu(openMenu === "list" ? null : "list"); }}>☷</button>
+          {openMenu === "list" && <div className="editor-popover list-popover"><button type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertUnorderedList"); }}><span>•</span>글머리 기호 목록<kbd>Ctrl+Shift+8</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertOrderedList"); }}><span>1.</span>번호 목록<kbd>Ctrl+Shift+7</kbd></button><button type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertHTML", "<div>☐&nbsp; 새 작업</div>"); }}><span>☑</span>작업 목록<kbd>Ctrl+Shift+6</kbd></button></div>}
+        </div>
+        <span className="toolbar-divider" />
+        <button type="button" title="링크" aria-label="링크 삽입" onMouseDown={(event) => { event.preventDefault(); insertLink(); }}>↗</button>
+        <button type="button" title="이미지" aria-label="이미지 삽입" onMouseDown={(event) => { event.preventDefault(); insertImage(); }}>▧</button>
+        <button type="button" title="코드 블록" aria-label="코드 블록" onMouseDown={(event) => { event.preventDefault(); runCommand("formatBlock", "pre"); }}>&lt;/&gt;</button>
+        <div className="editor-menu-wrap">
+          <button type="button" className={openMenu === "emoji" ? "active" : ""} title="이모지" aria-label="이모지 선택" aria-expanded={openMenu === "emoji"} onMouseDown={(event) => { event.preventDefault(); setOpenMenu(openMenu === "emoji" ? null : "emoji"); }}>☺</button>
+          {openMenu === "emoji" && <div className="editor-popover emoji-popover">{["🙂", "✅", "🚀", "💡", "🎯", "⚠️"].map((emoji) => <button key={emoji} type="button" onMouseDown={(event) => { event.preventDefault(); runCommand("insertText", emoji); }}>{emoji}</button>)}</div>}
+        </div>
+        <span className="toolbar-divider" />
+        <button type="button" title="실행 취소 (Ctrl+Z)" aria-label="실행 취소" onMouseDown={(event) => { event.preventDefault(); runCommand("undo"); }}>↶</button>
+        <button type="button" title="다시 실행" aria-label="다시 실행" onMouseDown={(event) => { event.preventDefault(); runCommand("redo"); }}>↷</button>
+        <button type="button" title="서식 지우기" aria-label="서식 지우기" onMouseDown={(event) => { event.preventDefault(); runCommand("removeFormat"); }}>Tx</button>
+      </div>
+      <div
+        ref={editorRef}
+        className="rich-editor-content"
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        aria-multiline="true"
+        aria-label="업무 설명"
+        data-placeholder="업무에 필요한 내용, 참고 사항, 완료 기준을 적어보세요."
+        onInput={emitChange}
+        onMouseUp={saveSelection}
+        onKeyUp={saveSelection}
+        onFocus={saveSelection}
+        onPaste={(event) => { event.preventDefault(); runCommand("insertText", event.clipboardData.getData("text/plain")); }}
+      />
+    </div>
+  );
+}
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -348,7 +454,7 @@ export default function Home() {
 
               <section className="detail-section">
                 <h3>설명</h3>
-                <textarea className="detail-description" rows={7} value={selectedTask.description ?? ""} onChange={(event) => updateTask(selectedTask.id, { description: event.target.value })} placeholder="업무에 필요한 내용, 참고 사항, 완료 기준을 적어보세요." />
+                <RichTextEditor key={selectedTask.id} value={selectedTask.description ?? ""} onChange={(description) => updateTask(selectedTask.id, { description })} />
               </section>
 
               <section className="detail-section activity-section">

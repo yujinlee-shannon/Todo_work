@@ -23,3 +23,10 @@
 @media (max-width:1050px) { .flow-indicator { display:none; } .main-grid { grid-template-columns:1fr; } .side-stack { grid-template-columns:1fr 1fr; } }
 @media (max-width:760px) { .topbar { height:60px; padding:0 18px; } .sync-pill { display:none; } .workspace { display:block; } .sidebar { position:fixed; z-index:30; bottom:0; top:auto; height:64px; width:100%; border-right:0; border-top:1px solid var(--line); padding:7px 12px; } .sidebar nav { display:grid; grid-template-columns:repeat(3,1fr); } .sidebar .nav-item { justify-content:center; flex-direction:column; gap:1px; padding:3px; font-size:8px; } .nav-icon { height:17px; } .sidebar-bottom { display:none; } .content { padding:30px 16px 94px; } .intro { margin-bottom:22px; } .intro h1 { font-size:28px; } .field-grid { grid-template-columns:1fr; } .form-card { padding:22px 18px; } .form-footer { align-items:stretch; flex-direction:column; } .privacy-note { text-align:center; } .button-row button { flex:1; } .side-stack { grid-template-columns:1fr; } .history-heading { align-items:flex-start; gap:12px; } }
 @media (max-width:430px) { .card-heading .text-button { font-size:9px; } .button-row { flex-direction:column-reverse; } .button-row button { width:100%; } }
+/* Google Sheets live connection states */
+.sync-pill.offline .sync-dot { background:#d28b24; box-shadow:0 0 0 3px #fff0d7; }
+.result-box.error { background:#fff0f1; color:#a4434d; }
+.live-badge.pending { color:#986216; background:#fff2dd; }
+.connection-message { margin:8px 0 0 !important; color:#9a6717 !important; line-height:1.45; }
+a.link-button { display:flex; align-items:center; justify-content:center; text-decoration:none; }
+.empty-cell { height:78px; text-align:center; color:#aaa4ae; }

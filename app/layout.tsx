@@ -1,32 +1,24 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { Geist } from "next/font/google";
 import "./globals.css";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const origin = `${protocol}://${host}`;
+const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 
+export async function generateMetadata(): Promise<Metadata> {
+  const headerList = await headers();
+  const host = headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "localhost:3000";
+  const protocol = headerList.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const siteUrl = `${protocol}://${host}`;
   return {
-    title: "ONE STEP — 나의 업무 보드",
-    description: "할 일, 진행 중, 완료 상태로 업무 흐름을 한눈에 관리하는 개인 업무 보드",
-    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: {
-      title: "ONE STEP — 나의 업무 보드",
-      description: "오늘의 업무를 한눈에 확인하고 다음 단계로 이동하세요.",
-      images: [{ url: `${origin}/og-board.png`, width: 1659, height: 948, alt: "ONE STEP 나의 업무 보드" }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: "ONE STEP — 나의 업무 보드",
-      description: "오늘의 업무를 한눈에 확인하고 다음 단계로 이동하세요.",
-      images: [`${origin}/og-board.png`],
-    },
+    metadataBase: new URL(siteUrl),
+    title: "Assetly | 자산관리 자동화",
+    description: "Google Sheets 기준 데이터와 자산 정보를 자동으로 검증하고 기록합니다.",
+    openGraph: { title: "Assetly", description: "자산 확인, 더 빠르고 정확하게", images: [{ url: "/og.png", width: 1200, height: 630 }] },
+    twitter: { card: "summary_large_image", title: "Assetly", description: "자산 확인, 더 빠르고 정확하게", images: ["/og.png"] },
   };
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="ko"><body>{children}</body></html>;
+  return <html lang="ko"><body className={geist.variable}>{children}</body></html>;
 }
-
